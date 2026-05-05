@@ -38,9 +38,9 @@
 
                 <nav class="flex flex-wrap items-center gap-2 text-sm font-medium text-stone-600">
                     <a class="rounded-lg px-3 py-2 text-stone-950 hover:bg-white" href="/">Hoard</a>
-                    <a class="rounded-lg px-3 py-2 hover:bg-white hover:text-stone-950" href="#">Generator</a>
+                    <a class="rounded-lg px-3 py-2 hover:bg-white hover:text-stone-950" href="/generator">Generator</a>
                     <a class="rounded-lg px-3 py-2 hover:bg-white hover:text-stone-950" href="#">Security</a>
-                    <a class="rounded-lg px-3 py-2 hover:bg-white hover:text-stone-950" href="#">Settings</a>
+                    <a class="rounded-lg px-3 py-2 hover:bg-white hover:text-stone-950" href="/settings">Settings</a>
 
                     @guest
                         <a class="rounded-lg bg-red-800 px-3 py-2 text-white hover:bg-red-900" href="/login">Login</a>
@@ -65,5 +65,7 @@
                 {{ $slot }}
             </main>
         </div>
+
+        @stack('scripts')
     </body>
 </html>

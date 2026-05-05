@@ -14,6 +14,8 @@ class TestUserSeeder extends Seeder
             [
                 'name' => 'Test Student',
                 'password' => 'StrongPass123!',
+                'email_verified_at' => now(),
+                'mfa_method' => 'email',
             ],
         );
     }

@@ -2,8 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Notifications\MfaEmailCode;
 use App\Models\User;
+use App\Services\TotpService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class LoginTest extends TestCase
@@ -16,11 +19,13 @@ class LoginTest extends TestCase
             'name' => 'Test Student',
             'email' => 'student@example.com',
             'password' => 'StrongPass123!',
+            'mfa_method' => null,
         ]);
 
         $response = $this->post('/login', [
             'email' => 'student@example.com',
             'password' => 'StrongPass123!',
+            'mfa_method' => null,
         ]);
 
         $response->assertRedirect('/');
@@ -57,6 +62,51 @@ class LoginTest extends TestCase
         $response = $this->actingAs($user)->post('/logout');
 
         $response->assertRedirect('/login');
+        $this->assertGuest();
+    }
+
+    public function test_user_with_authenticator_app_mfa_must_complete_challenge(): void
+    {
+        $totpService = app(TotpService::class);
+        $secret = $totpService->generateSecret();
+        $user = User::factory()->create([
+            'email' => 'student@example.com',
+            'password' => 'StrongPass123!',
+            'mfa_method' => 'token',
+            'mfa_totp_secret' => $secret,
+        ]);
+
+        $this->post('/login', [
+            'email' => 'student@example.com',
+            'password' => 'StrongPass123!',
+        ])->assertRedirect('/mfa/challenge');
+
+        $this->assertGuest();
+
+        $this->post('/mfa/challenge', [
+            'code' => $totpService->code($secret),
+        ])->assertRedirect('/');
+
+        $this->assertAuthenticatedAs($user);
+    }
+
+    public function test_user_with_default_email_mfa_receives_a_code(): void
+    {
+        Notification::fake();
+
+        $user = User::factory()->create([
+            'email' => 'student@example.com',
+            'password' => 'StrongPass123!',
+            'mfa_method' => 'email',
+        ]);
+
+        $this->post('/login', [
+            'email' => 'student@example.com',
+            'password' => 'StrongPass123!',
+        ])->assertRedirect('/mfa/challenge');
+
+        Notification::assertSentTo($user, MfaEmailCode::class);
+        $this->assertNotNull($user->fresh()->mfa_email_code_hash);
         $this->assertGuest();
     }
 }
