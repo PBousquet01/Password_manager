@@ -74,10 +74,115 @@
                 Unlock Hoard
             </button>
 
+            <div class="mt-5 flex items-center gap-3">
+                <span class="h-px flex-1 bg-stone-200"></span>
+                <span class="text-xs font-semibold uppercase text-stone-500">or</span>
+                <span class="h-px flex-1 bg-stone-200"></span>
+            </div>
+
+            <button id="login-passkey" class="mt-5 inline-flex h-11 w-full items-center justify-center rounded-lg border border-stone-200 px-4 text-sm font-semibold hover:bg-stone-50 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400" type="button">
+                Login with Passkey
+            </button>
+            <p id="passkey-login-status" class="mt-3 text-sm font-semibold text-stone-600"></p>
+
             <p class="mt-5 text-center text-sm text-stone-600">
                 New to Dragon's Hoard?
                 <a class="font-semibold text-red-800 hover:text-red-900" href="/register">Create an account</a>
             </p>
         </form>
     </section>
+
+    @push('scripts')
+        <script>
+            const passkeyLoginButton = document.getElementById('login-passkey');
+            const passkeyLoginStatus = document.getElementById('passkey-login-status');
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+
+            function base64urlToBuffer(value) {
+                const base64 = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
+                const binary = atob(base64);
+                const bytes = new Uint8Array(binary.length);
+
+                for (let index = 0; index < binary.length; index++) {
+                    bytes[index] = binary.charCodeAt(index);
+                }
+
+                return bytes.buffer;
+            }
+
+            function bufferToBase64url(buffer) {
+                const bytes = new Uint8Array(buffer);
+                let binary = '';
+
+                bytes.forEach((byte) => binary += String.fromCharCode(byte));
+
+                return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+            }
+
+            function setPasskeyLoginStatus(message, isError = false) {
+                passkeyLoginStatus.textContent = message;
+                passkeyLoginStatus.className = `mt-3 text-sm font-semibold ${isError ? 'text-red-700' : 'text-stone-600'}`;
+            }
+
+            passkeyLoginButton?.addEventListener('click', async () => {
+                if (!window.PublicKeyCredential) {
+                    setPasskeyLoginStatus('This browser does not support passkeys.', true);
+                    return;
+                }
+
+                passkeyLoginButton.disabled = true;
+                setPasskeyLoginStatus('Preparing passkey login...');
+
+                try {
+                    const optionsResponse = await fetch('/passkeys/options', {
+                        headers: {'Accept': 'application/json'},
+                    });
+                    const options = await optionsResponse.json();
+
+                    options.challenge = base64urlToBuffer(options.challenge);
+                    options.allowCredentials = options.allowCredentials.map((credential) => ({
+                        ...credential,
+                        id: base64urlToBuffer(credential.id),
+                    }));
+
+                    setPasskeyLoginStatus('Follow your browser prompt to sign in.');
+
+                    const credential = await navigator.credentials.get({publicKey: options});
+                    const payload = {
+                        credential: {
+                            id: credential.id,
+                            type: credential.type,
+                            rawId: bufferToBase64url(credential.rawId),
+                            response: {
+                                authenticatorData: bufferToBase64url(credential.response.authenticatorData),
+                                clientDataJSON: bufferToBase64url(credential.response.clientDataJSON),
+                                signature: bufferToBase64url(credential.response.signature),
+                                userHandle: credential.response.userHandle ? bufferToBase64url(credential.response.userHandle) : null,
+                            },
+                        },
+                    };
+
+                    const loginResponse = await fetch('/passkeys/login', {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken,
+                        },
+                        body: JSON.stringify(payload),
+                    });
+                    const result = await loginResponse.json();
+
+                    if (!loginResponse.ok) {
+                        throw new Error(result.message || 'Passkey login failed.');
+                    }
+
+                    window.location.href = result.redirect || '/';
+                } catch (error) {
+                    setPasskeyLoginStatus(error.message || 'Passkey login was cancelled.', true);
+                    passkeyLoginButton.disabled = false;
+                }
+            });
+        </script>
+    @endpush
 </x-layout>

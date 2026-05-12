@@ -38,6 +38,13 @@ class LoginTest extends TestCase
             ->assertDontSee('Register');
     }
 
+    public function test_login_page_has_passkey_button(): void
+    {
+        $this->get('/login')
+            ->assertOk()
+            ->assertSee('Login with Passkey');
+    }
+
     public function test_user_cannot_login_with_invalid_credentials(): void
     {
         User::factory()->create([

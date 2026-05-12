@@ -125,9 +125,14 @@
                         @endforelse
                     </div>
 
-                    <button class="mt-5 inline-flex h-10 w-full items-center justify-center rounded-lg border border-stone-200 px-4 text-sm font-semibold text-stone-500" type="button" disabled>
+                    <label class="mt-5 block">
+                        <span class="text-sm font-semibold text-stone-700">Passkey name</span>
+                        <input id="passkey-name" class="mt-2 h-10 w-full rounded-lg border border-stone-200 bg-stone-50 px-3 text-sm outline-none focus:border-red-800 focus:bg-white focus:ring-2 focus:ring-red-100" type="text" placeholder="MacBook Touch ID">
+                    </label>
+                    <button id="add-passkey" class="mt-3 inline-flex h-10 w-full items-center justify-center rounded-lg bg-red-800 px-4 text-sm font-semibold text-white hover:bg-red-900 disabled:cursor-not-allowed disabled:bg-stone-300" type="button">
                         Add Passkey
                     </button>
+                    <p id="passkey-status" class="mt-3 text-sm font-semibold text-stone-600"></p>
                 </section>
 
                 <section class="rounded-lg border border-stone-300 bg-white p-6 shadow-sm">
@@ -166,4 +171,101 @@
             </div>
         </div>
     </section>
+
+    @push('scripts')
+        <script>
+            const addPasskeyButton = document.getElementById('add-passkey');
+            const passkeyStatus = document.getElementById('passkey-status');
+            const passkeyName = document.getElementById('passkey-name');
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+
+            function base64urlToBuffer(value) {
+                const base64 = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
+                const binary = atob(base64);
+                const bytes = new Uint8Array(binary.length);
+
+                for (let index = 0; index < binary.length; index++) {
+                    bytes[index] = binary.charCodeAt(index);
+                }
+
+                return bytes.buffer;
+            }
+
+            function bufferToBase64url(buffer) {
+                const bytes = new Uint8Array(buffer);
+                let binary = '';
+
+                bytes.forEach((byte) => binary += String.fromCharCode(byte));
+
+                return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+            }
+
+            function setPasskeyStatus(message, isError = false) {
+                passkeyStatus.textContent = message;
+                passkeyStatus.className = `mt-3 text-sm font-semibold ${isError ? 'text-red-700' : 'text-stone-600'}`;
+            }
+
+            addPasskeyButton?.addEventListener('click', async () => {
+                if (!window.PublicKeyCredential) {
+                    setPasskeyStatus('This browser does not support passkeys.', true);
+                    return;
+                }
+
+                addPasskeyButton.disabled = true;
+                setPasskeyStatus('Preparing passkey setup...');
+
+                try {
+                    const optionsResponse = await fetch('/settings/passkeys/options', {
+                        headers: {'Accept': 'application/json'},
+                    });
+                    const options = await optionsResponse.json();
+
+                    options.challenge = base64urlToBuffer(options.challenge);
+                    options.user.id = base64urlToBuffer(options.user.id);
+                    options.excludeCredentials = options.excludeCredentials.map((credential) => ({
+                        ...credential,
+                        id: base64urlToBuffer(credential.id),
+                    }));
+
+                    setPasskeyStatus('Follow your browser prompt to create the passkey.');
+
+                    const credential = await navigator.credentials.create({publicKey: options});
+                    const payload = {
+                        name: passkeyName.value,
+                        credential: {
+                            id: credential.id,
+                            type: credential.type,
+                            rawId: bufferToBase64url(credential.rawId),
+                            response: {
+                                attestationObject: bufferToBase64url(credential.response.attestationObject),
+                                clientDataJSON: bufferToBase64url(credential.response.clientDataJSON),
+                            },
+                        },
+                    };
+
+                    const saveResponse = await fetch('/settings/passkeys', {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken,
+                        },
+                        body: JSON.stringify(payload),
+                    });
+
+                    const result = await saveResponse.json();
+
+                    if (!saveResponse.ok) {
+                        throw new Error(result.message || 'Passkey could not be added.');
+                    }
+
+                    setPasskeyStatus('Passkey added. Refreshing...');
+                    window.location.reload();
+                } catch (error) {
+                    setPasskeyStatus(error.message || 'Passkey setup was cancelled.', true);
+                    addPasskeyButton.disabled = false;
+                }
+            });
+        </script>
+    @endpush
 </x-layout>

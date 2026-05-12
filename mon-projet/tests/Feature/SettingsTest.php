@@ -21,7 +21,36 @@ class SettingsTest extends TestCase
             ->assertSee('Multi-factor authentication')
             ->assertSee('Modify password')
             ->assertSee('Passkeys')
+            ->assertSee('Add Passkey')
             ->assertSee('Sessions');
+    }
+
+    public function test_user_can_request_passkey_registration_options(): void
+    {
+        $this->actingAs(User::factory()->create())
+            ->getJson('/settings/passkeys/options')
+            ->assertOk()
+            ->assertJsonPath('rp.name', config('app.name'))
+            ->assertJsonPath('authenticatorSelection.residentKey', 'required')
+            ->assertJsonPath('authenticatorSelection.userVerification', 'required')
+            ->assertJsonStructure([
+                'challenge',
+                'rp' => ['name', 'id'],
+                'user' => ['id', 'name', 'displayName'],
+                'pubKeyCredParams',
+            ]);
+    }
+
+    public function test_guest_can_request_passkey_login_options(): void
+    {
+        $this->getJson('/passkeys/options')
+            ->assertOk()
+            ->assertJsonPath('userVerification', 'required')
+            ->assertJsonStructure([
+                'challenge',
+                'rpId',
+                'allowCredentials',
+            ]);
     }
 
     public function test_user_can_update_master_password(): void

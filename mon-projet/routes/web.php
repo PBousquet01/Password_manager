@@ -1,11 +1,13 @@
 <?php
 
 use App\Models\User;
+use App\Models\Passkey;
 use App\Models\StoredPassword;
 use App\Models\StoredPasswordShare;
 use App\Notifications\PasswordShareInvitation;
 use App\Services\FaviconResolver;
 use App\Services\TotpService;
+use App\Services\WebauthnService;
 use App\Notifications\MfaEmailCode;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -129,6 +131,27 @@ Route::delete('/settings/passkeys/{passkey}', function (Request $request, string
         ->delete();
 
     return back()->with('status', 'Passkey removed.');
+})->middleware(['auth', 'verified']);
+
+Route::get('/settings/passkeys/options', function (Request $request, WebauthnService $webauthnService) {
+    return response()->json($webauthnService->publicKeyCreationOptions($request->user(), $request));
+})->middleware(['auth', 'verified']);
+
+Route::post('/settings/passkeys', function (Request $request, WebauthnService $webauthnService) {
+    $validated = $request->validate([
+        'name' => ['nullable', 'string', 'max:255'],
+        'credential' => ['required', 'array'],
+    ]);
+
+    try {
+        $passkey = $webauthnService->verifyRegistration($request->user(), $validated['credential'], $request);
+    } catch (InvalidArgumentException $exception) {
+        return response()->json(['message' => $exception->getMessage()], 422);
+    }
+
+    $request->user()->passkeys()->create($passkey);
+
+    return response()->json(['message' => 'Passkey added.']);
 })->middleware(['auth', 'verified']);
 
 Route::post('/passwords', function (Request $request, FaviconResolver $faviconResolver) {
@@ -276,6 +299,38 @@ Route::delete('/passwords/{storedPassword}', function (Request $request, StoredP
 Route::get('/login', function () {
     return view('login');
 })->name('login');
+
+Route::get('/passkeys/options', function (Request $request, WebauthnService $webauthnService) {
+    return response()->json($webauthnService->publicKeyRequestOptions($request));
+})->middleware('guest');
+
+Route::post('/passkeys/login', function (Request $request, WebauthnService $webauthnService) {
+    $validated = $request->validate([
+        'credential' => ['required', 'array'],
+    ]);
+
+    $passkey = Passkey::where('credential_id', $validated['credential']['id'] ?? null)->first();
+
+    if (! $passkey) {
+        return response()->json(['message' => 'Passkey is not registered for this app.'], 422);
+    }
+
+    try {
+        $signCount = $webauthnService->verifyAuthentication($passkey, $validated['credential'], $request);
+    } catch (InvalidArgumentException $exception) {
+        return response()->json(['message' => $exception->getMessage()], 422);
+    }
+
+    $passkey->update([
+        'sign_count' => $signCount,
+        'last_used_at' => now(),
+    ]);
+
+    Auth::login($passkey->user);
+    $request->session()->regenerate();
+
+    return response()->json(['redirect' => url('/')]);
+})->middleware('guest');
 
 Route::post('/login', function (Request $request) {
     $credentials = $request->validate([
