@@ -11,6 +11,9 @@
 
         <title>{{ $title }}</title>
 
+        <link rel="icon" type="image/png" href="/icon.PNG">
+        <link rel="apple-touch-icon" href="/icon.PNG">
+
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600,700" rel="stylesheet" />
 
@@ -24,12 +27,7 @@
         <div class="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-4 sm:px-6 lg:px-8">
             <header class="flex flex-col gap-4 border-b border-stone-300 pb-4 sm:flex-row sm:items-center sm:justify-between">
                 <a href="/" class="flex items-center gap-3">
-                    <span class="grid size-11 place-items-center rounded-lg bg-red-800 text-amber-100 shadow-sm">
-                        <svg aria-hidden="true" class="size-6" viewBox="0 0 24 24" fill="none">
-                            <path d="M12 3 5 6v5c0 4.4 2.9 8.5 7 10 4.1-1.5 7-5.6 7-10V6l-7-3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-                            <path d="M9.5 12.5 12 9l2.5 3.5A3 3 0 1 1 9.5 12.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-                        </svg>
-                    </span>
+                    <img class="size-11 rounded-lg object-cover shadow-sm" src="/icon.PNG" alt="" aria-hidden="true">
                     <span>
                         <span class="block text-xl font-bold">Dragon's Hoard</span>
                         <span class="block text-sm text-stone-600">Password Manager</span>
